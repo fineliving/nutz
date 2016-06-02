@@ -23,9 +23,9 @@ import org.nutz.ioc.aop.impl.DefaultMirrorFactory;
 import org.nutz.ioc.loader.annotation.IocBean;
 import org.nutz.ioc.loader.combo.ComboIocLoader;
 import org.nutz.ioc.meta.IocObject;
-import org.nutz.lang.Lang;
 import org.nutz.lang.Strings;
 import org.nutz.lang.Times;
+import org.nutz.lang.util.LifeCycle;
 import org.nutz.log.Log;
 import org.nutz.log.Logs;
 import org.nutz.repo.LevenshteinDistance;
@@ -149,6 +149,13 @@ public class NutIoc implements Ioc2 {
     public <T> T get(Class<T> type, String name, IocContext context) throws IocException {
         if (log.isDebugEnabled())
             log.debugf("Get '%s'<%s>", name, type == null ? "" : type);
+        try {
+            if (this.mirrors instanceof LifeCycle)
+                ((LifeCycle)this.mirrors).init();
+        }
+        catch (Exception e) {
+            throw new IocException("_mirror_factory_init", "Mirror Factory init fail", e);
+        }
 
         // 创建对象创建时
         IocMaking ing = makeIocMaking(context, name);
@@ -177,18 +184,18 @@ public class NutIoc implements Ioc2 {
                                 // 相似性少于3 --> 大小写错误,1-2个字符调换顺序或写错
                                 if (3 > LevenshteinDistance.computeLevenshteinDistance(name.toLowerCase(),
                                                                                        iocBeanName.toLowerCase())) {
-                                    throw new IocException("Undefined object '%s' but found similar name '%s'",
+                                    throw new IocException(name, "Undefined object '%s' but found similar name '%s'",
                                                            name,
                                                            iocBeanName);
                                 }
                             }
-                            throw new IocException("Undefined object '%s'", name);
+                            throw new IocException(name, "Undefined object '%s'", name);
                         }
 
                         // 修正对象类型
                         if (null == iobj.getType())
                             if (null == type)
-                                throw new IocException("NULL TYPE object '%s'", name);
+                                throw new IocException(name, "NULL TYPE object '%s'", name);
                             else
                                 iobj.setType(type);
 
@@ -203,10 +210,11 @@ public class NutIoc implements Ioc2 {
                     }
                     // 处理异常
                     catch (IocException e) {
+                        ((IocException)e).addBeanNames(name);
                         throw e;
                     }
                     catch (Throwable e) {
-                        throw new IocException(Lang.unwrapThrow(e),
+                        throw new IocException(name, e,
                                                "For object [%s] - type:[%s]",
                                                name,
                                                type == null ? "" : type);
@@ -371,6 +379,6 @@ public class NutIoc implements Ioc2 {
             if (_name != null)
                 return get(klass, name, context);
         }
-        throw new IocException("none ioc bean match class="+klass.getName());
+        throw new IocException("class:"+klass.getName(), "none ioc bean match class="+klass.getName());
     }
 }
